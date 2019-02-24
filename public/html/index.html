@@ -1,13 +1,257 @@
 <!DOCTYPE html>
 <html>
 <head>
-   <title>Speech Practice</title>
+   <title>Speechly</title>
    <meta charset="utf8" />
    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/x.y.z/css/bulma.css" />
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css" />
    <link rel="stylesheet" href="/public/css/main.css" />
+   <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
 </head>
 <body>
-   Hello, world
+   <header class="hero is-primary">
+      <div class="hero-body">
+         <div class="container">
+            <h1 class="title">Speechly 💬</h1>
+         </div>
+      </div>
+   </header>
+   <section class="section" id="app">
+      <div class="container">
+         <div class="columns">
+            <div class="column">
+               <h2 class="title has-text-centered">Script 📃</h2>
+               <p class='has-text-centered'>
+                  <label for="show-script">Show Script</label>
+                  <input type="checkbox" name="show-script" v-model='showScript' id='show-script' /><br>
+               </p>
+               <br><br>
+               <div class="box">
+                  <div v-if='showScript' class='script'>
+                     <p v-for='line in script.split("\n")'>
+                        {{ line }}<br>
+                     </p>
+                  </div>
+                  <p v-if='!showScript'>
+                     Script is hidden.
+                  </p>
+               </div>
+            </div>
+            <div class="column">
+               <h2 class="title has-text-centered">Practice 💪</h2>
+               <p class='has-text-centered'>
+                  <label for="use-video">Use Camera to Track Gestures</label>
+                  <input type="checkbox" name="use-video" v-model='useVideo' id='use-video' /><br>
+                  <label for="show-camera">Show Camera</label>
+                  <input type="checkbox" name="show-camera" v-model='showCamera' id='show-camera'  :disabled='!useVideo' />
+               </p>
+               <br>
+               <p>
+                  <a class="button is-danger is-fullwidth is-outlined" v-if='!recording' @click='startRecording'>Start Recording</a>
+                  <a class="button is-danger is-fullwidth is-outlined" v-if='recording' @click='stopRecording'>Stop Recording</a>
+                  <br>
+                  <a class="button is-danger is-fullwidth is-outlined" @click='resetText'>Reset</a>
+               </p>
+               <br>
+               <div class="box textbox">
+                  <p><span v-html='processedTranscript.length == 0 ? transcript : processedTranscript'></span><span class='has-text-grey'>{{ tentativeTranscript }}</span></p>
+               </div>
+               <video id='webcam' class='video-box' autoplay='true' :style='!(showCamera && useVideo) ? "display: hidden; opacity: 0; width: 0; height: 0;" : ""'></video>
+               <canvas id="canvas" style='display: hidden; opacity: 0; width: 0; height: 0;'></canvas>
+            </div>
+            <div class="column">
+               <h2 class="title has-text-centered">Live Statistics 💯</h2>
+               <p>&nbsp;</p>
+               <br><br>
+               <class class="box">
+                  <p class="stats">
+                     <span class='stat-label'>Filler Words:</span> <span class='tag'>{{ numberFillerWords }}</span><br>
+                     <span class='stat-label'>Filler Word Ratio:</span> <span class='tag' :class="{'is-success': fillerWordRatio <= 0.05, 'is-warning': fillerWordRatio > 0.05 &&  fillerWordRatio <= 0.1, 'is-danger': fillerWordRatio > 0.1}">{{ fillerWordRatio }}</span><br>
+                     <span class="stat-label">Script Score:</span> <span class="tag" :class="{'is-success': overallSimilar >= 0.7, 'is-warning': overallSimilar >= 0.4 &&  overallSimilar < 0.7, 'is-danger': overallSimilar < 0.4}">{{ overallSimilar }}</span><br>
+                     <span class="stat-label">Words per Minutes:</span> <span class="tag" :class="{'is-success': wordsPerMinutes <= 160, 'is-warning': wordsPerMinutes > 160 &&  wordsPerMinutes <= 200, 'is-danger': wordsPerMinutes > 200}">{{ wordsPerMinutes }}</span><br>
+                     <span class="stat-label">Gesture Ratio:</span> <span v-if='useVideo' class="tag" :class="{'is-success': gestureRatio > 0.25, 'is-warning': gestureRatio > 0.07 && gestureRatio <= 0.25, 'is-danger': gestureRatio <= 0.07}">{{ gestureRatio }}</span><span v-if='!useVideo' class='tag'>Enable Video</span>
+                  </p>
+                  <br>
+                  <br>
+                  <h2 class="sub-title">Tips:</h2>
+                  <p v-if='wordsPerMinutes > 160'>Try to slow down a little</p>
+                  <p v-if='overallSimilar < 0.7'>Try to stay on script</p>
+                  <p v-if='fillerWordRatio > 0.05'>Try to use less filler words</p>
+                  <p v-if='useVideo && gestureRatio < 0.25'>Try to gesture more</p>
+                  <p v-if='!(wordsPerMinutes > 160 || overallSimilar < 0.7 || fillerWordRatio > 0.05 || useVideo && gestureRatio < 0.25)'>You're on track!</p>
+               </class>
+            </div>
+         </div>
+      </div>
+   </section>
+   <div id="thumbnailContainer"></div>
+   <script src='https://cdn.WebRTC-Experiment.com/RecordRTC.js'></script>
+   <script
+      src="https://code.jquery.com/jquery-3.3.1.min.js"
+      integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+      crossorigin="anonymous"></script>
+   <script>
+      const server = 'http://localhost:7654';
+      var app;
+
+      var recognition = new webkitSpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      // recognition.lang = 'en';
+      recognition.onresult = function (event) {
+         for (var i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+               app.transcript += ' ' + event.results[i][0].transcript;
+               app.tentativeTranscript = '';
+            } else {
+               app.tentativeTranscript = ' ' + event.results[i][0].transcript;
+            }
+         }
+      };
+
+      app = new Vue({
+         el: '#app',
+         data: {
+            showScript: true,
+            typedSinceUpdate: 0,
+            processedTranscript: '',
+            numberFillerWords: 0,
+            fillerWordRatio: 0,
+            overallSimilar: 1,
+            wordsPerMinutes: 0,
+            startTime: 0,
+            gestureImages: 0,
+            nonGestureImages: 0,
+            gestureRatio: 0,
+            useVideo: false,
+            showCamera: false,
+            previousTime: 0,
+            script: `Hi, I'm Robert. I was born  June, 2000. I am adding  more  text to see if that is why we  can't get  a good distance. These are a few more words that could get me to  over fifty words. And in the source the words  will be a different but I'll type until I can't type anymore. It  turns out that  pigs  are the dumbest mammal. They can't look at  the sky because their snouts are too little and they are smelly. Pigs are a pink animal that  is good for bacon. As we get  to this last  section we should have  very similar text with the exact same sentences. This will ensure that we can get back on script without warnings.`,
+            transcript: ``,
+            tentativeTranscript: ``,
+            lastTranscript: ``,
+            recording: false
+         },
+         methods: {
+            process: async function () {
+               const res1 = await $.ajax({
+                  url: `${server}/api/all/`,
+                  type: 'POST',
+                  data: {
+                     text: this.transcript,
+                     source: this.script
+                  }
+               });
+               console.log(res1)
+               const body = await JSON.parse(res1.body)
+               console.log(body)
+               this.processedTranscript = body.html;
+               this.numberFillerWords = body.count;
+               this.fillerWordRatio = Math.floor(body.count / (this.transcript.split(' ').length + 1) * 1000) / 1000;
+               this.overallSimilar = Math.floor(body.overall * 1000) / 1000;
+               console.log((this.transcript.split(' ').length + 1));
+               console.log((((new Date()) - this.startTime) / 1000));
+               this.wordsPerMinutes = Math.floor(((this.transcript.split(' ').length + 1) / (((new Date()) - this.startTime + this.previousTime) / 1000)) * 10 * 60) / 10;
+            },
+            startRecording: function () {
+               recognition.start();
+               this.recording = true;
+               this.startTime = new Date();
+            },
+            stopRecording: function () {
+               recognition.stop();
+               this.recording = false;
+               this.previousTime += (new Date()) - this.startTime;
+            },
+            resetText: function () {
+               this.transcript = '';
+               this.wordsPerMinutes = 0;
+               this.overallSimilar = 1;
+               this.fillerWordRatio = 0;
+               this.numberFillerWords = 0;
+               this.previousTime = 0;
+            }
+         }
+      });
+
+      setInterval(() => {
+         if (app.lastTranscript != app.transcript) {
+            app.process();
+            app.lastTranscript = app.transcript;
+         }
+      }, 500);
+
+      $('body').on('click', function () {
+         $('.tip').remove();
+      });
+
+      $('body').on('click', '.filler', function (e) {
+         console.log('e:', e);
+         setTimeout(() => {
+            $(this).append('<div class="tip box"><p class="subtitle">Filler Words</p><p>Try not to use words like um, uh, like, okay, and other filler words.</p></div>');
+            $('.tip').css('left', (e.clientX - $('.column').offset().left - 25) + 'px');
+            $('.tip').css('top', e.clientY - 150 + 'px');
+         });
+      });
+
+      $('body').on('click', '.off-script', function (e) {
+         setTimeout(() => {
+            $(this).append('<div class="tip box"><p class="subtitle">Off Script</p><p>This section may not align with the script.</p></div>');
+            $('.tip').css('left', (e.clientX - $('.column').offset().left - 25) + 'px');
+            $('.tip').css('top', e.clientY - 150 + 'px');
+         });
+      });
+
+      // picture code
+
+      let webcam = document.querySelector('#webcam');
+      this.loadedPreview = true;
+      if (navigator.mediaDevices.getUserMedia) {       
+         navigator.mediaDevices.getUserMedia({video: true})
+            .then(function(stream) {
+               webcam.srcObject = stream;
+            })
+            .catch(function(err) {
+               console.log('Something went wrong!');
+               console.log(err);
+            });
+      }
+
+      let video = document.getElementById('webcam');
+      let thecanvas = document.getElementById('canvas');
+      let message = document.getElementById('message');
+
+      let vueThis = this;
+
+      var interval = setInterval(function() {
+         if (app.useVideo && app.recording) generateThumbnail();
+      }, 500);
+
+      function generateThumbnail() {     
+         //generate thumbnail URL data
+         var context = thecanvas.getContext('2d');
+         context.drawImage(video, 0, 0, 220, 150);
+         var dataURL = thecanvas.toDataURL();
+
+         //create img
+         // var img = document.createElement('img');
+         // img.setAttribute('src', dataURL);
+
+         // //append img in container div
+         // document.getElementById('thumbnailContainer').appendChild(img);
+
+         $.post('http://localhost:7654/image/', {image: dataURL}).done(function (res) {
+            const data = JSON.parse(res);
+            console.log(data);
+            if (data.classification == 'bad') {
+               app.nonGestureImages = app.nonGestureImages + 1;
+            } else {
+               app.gestureImages = app.gestureImages + 1;
+            }
+            app.gestureRatio = Math.floor(100 * app.gestureImages / (app.gestureImages + app.nonGestureImages)) / 100;
+            console.log(app.gestureRatio, app.nonGestureImages, app.gestureRatio);
+         });
+      }
+   </script>
 </body>
 </html>

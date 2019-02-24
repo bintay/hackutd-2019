@@ -17,6 +17,10 @@
   },
   "homepage": "https://github.com/bintay/hackutd-2019#readme",
   "dependencies": {
-    "express": "^4.16.4"
+    "body-parser": "^1.18.3",
+    "express": "^4.16.4",
+    "http-proxy": "^1.17.0",
+    "multer": "^1.4.1",
+    "request": "^2.88.0"
   }
 }
