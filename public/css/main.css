@@ -63,3 +63,17 @@
    border-radius: 6px;
    box-shadow: 0 2px 3px rgba(10,10,10,.1), 0 0 0 1px rgba(10,10,10,.1);
 }
+
+.hidden {
+   display: none !important;
+}
+
+#temocContainer {
+   position: absolute;
+   margin-top: -300px;
+   margin-left: 8%;
+}
+
+#temocContainer img {
+   width: 180px;
+}

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-   <title>Speechly</title>
+   <title>Pitchly</title>
    <meta charset="utf8" />
    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css" />
@@ -12,13 +12,13 @@
    <header class="hero is-primary">
       <div class="hero-body">
          <div class="container">
-            <h1 class="title">Speechly 💬</h1>
+            <h1 class="title">Pitchly 💬</h1>
          </div>
       </div>
    </header>
    <section class="section" id="app">
       <div class="container">
-         <div class="columns">
+         <div class="columns" :class='{"hidden": showData}'>
             <div class="column">
                <h2 class="title has-text-centered">Script 📃</h2>
                <p class='has-text-centered'>
@@ -57,13 +57,14 @@
                   <p><span v-html='processedTranscript.length == 0 ? transcript : processedTranscript'></span><span class='has-text-grey'>{{ tentativeTranscript }}</span></p>
                </div>
                <video id='webcam' class='video-box' autoplay='true' :style='!(showCamera && useVideo) ? "display: hidden; opacity: 0; width: 0; height: 0;" : ""'></video>
+               <div id="temocContainer"></div>
                <canvas id="canvas" style='display: hidden; opacity: 0; width: 0; height: 0;'></canvas>
             </div>
             <div class="column">
                <h2 class="title has-text-centered">Live Statistics 💯</h2>
                <p>&nbsp;</p>
                <br><br>
-               <class class="box">
+               <div class="box">
                   <p class="stats">
                      <span class='stat-label'>Filler Words:</span> <span class='tag'>{{ numberFillerWords }}</span><br>
                      <span class='stat-label'>Filler Word Ratio:</span> <span class='tag' :class="{'is-success': fillerWordRatio <= 0.05, 'is-warning': fillerWordRatio > 0.05 &&  fillerWordRatio <= 0.1, 'is-danger': fillerWordRatio > 0.1}">{{ fillerWordRatio }}</span><br>
@@ -72,20 +73,30 @@
                      <span class="stat-label">Gesture Ratio:</span> <span v-if='useVideo' class="tag" :class="{'is-success': gestureRatio > 0.25, 'is-warning': gestureRatio > 0.07 && gestureRatio <= 0.25, 'is-danger': gestureRatio <= 0.07}">{{ gestureRatio }}</span><span v-if='!useVideo' class='tag'>Enable Video</span>
                   </p>
                   <br>
-                  <br>
                   <h2 class="sub-title">Tips:</h2>
                   <p v-if='wordsPerMinutes > 160'>Try to slow down a little</p>
                   <p v-if='overallSimilar < 0.7'>Try to stay on script</p>
                   <p v-if='fillerWordRatio > 0.05'>Try to use less filler words</p>
                   <p v-if='useVideo && gestureRatio < 0.25'>Try to gesture more</p>
                   <p v-if='!(wordsPerMinutes > 160 || overallSimilar < 0.7 || fillerWordRatio > 0.05 || useVideo && gestureRatio < 0.25)'>You're on track!</p>
-               </class>
+                  <br>
+                  <p class='has-text-right'><a href='#' @click='toggleData'>Show data series &gt;</a></p>
+               </div>
+            </div>
+         </div>
+         <div class="columns" :class='{"hidden": !showData}'>
+            <div class="column is-2">
+               <p><a href='#' @click='toggleData'>&lt; Back to practice</a></p>
+            </div>
+            <div class="column is-10">
+               <canvas id="chart"></canvas>
             </div>
          </div>
       </div>
    </section>
    <div id="thumbnailContainer"></div>
    <script src='https://cdn.WebRTC-Experiment.com/RecordRTC.js'></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"> </script>
    <script
       src="https://code.jquery.com/jquery-3.3.1.min.js"
       integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
@@ -126,11 +137,13 @@
             useVideo: false,
             showCamera: false,
             previousTime: 0,
-            script: `Hi, I'm Robert. I was born  June, 2000. I am adding  more  text to see if that is why we  can't get  a good distance. These are a few more words that could get me to  over fifty words. And in the source the words  will be a different but I'll type until I can't type anymore. It  turns out that  pigs  are the dumbest mammal. They can't look at  the sky because their snouts are too little and they are smelly. Pigs are a pink animal that  is good for bacon. As we get  to this last  section we should have  very similar text with the exact same sentences. This will ensure that we can get back on script without warnings.`,
+            showData: false,
+            script: `This system is pretty cool. We can track similarity between the script and the speech, gesture frequency, filler words, and speech rate to streamline presentation preparation. Built with Vue, NLTK, Scikit-Learn, Google Cloud, Flask, Node, Bulma, WebRTC, and Webkit Speech Recognition in twenty-four hours.`,
             transcript: ``,
             tentativeTranscript: ``,
             lastTranscript: ``,
-            recording: false
+            recording: false,
+            data: JSON.parse(localStorage['data'] || '{"filler": [], "similar":[], "rate":[], "gesture":[]}')
          },
          methods: {
             process: async function () {
@@ -162,6 +175,11 @@
                recognition.stop();
                this.recording = false;
                this.previousTime += (new Date()) - this.startTime;
+               this.data.filler.push(this.fillerWordRatio * 100);
+               this.data.similar.push(this.overallSimilar * 100);
+               this.data.rate.push(this.wordsPerMinutes);
+               this.data.gesture.push(this.gestureRatio * 100);
+               localStorage['data'] = JSON.stringify(this.data);
             },
             resetText: function () {
                this.transcript = '';
@@ -170,6 +188,66 @@
                this.fillerWordRatio = 0;
                this.numberFillerWords = 0;
                this.previousTime = 0;
+            },
+            toggleData: function () {
+               this.showData = !this.showData;
+               if (this.showData) {
+                  app.$forceUpdate();
+                  let vueThis = this;
+                  setTimeout(() => {
+                     let labels = [];
+                     for (let i = 0; i < vueThis.data.filler.length; ++i) labels.push(i + 1);
+                     let chartCanvas = document.getElementById('chart');
+                     let ctx = chartCanvas.getContext('2d');
+                     let mixedChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                           datasets: [{
+                              label: 'Filler Word Ratio (%)',
+                              data: vueThis.data.filler.map(v => Math.floor(v)),
+                              backgroundColor: 'hsl(171, 100%, 41%)',
+                              borderColor: 'hsl(171, 100%, 31%)',
+                              fill: false
+                           }, {
+                              label: 'Gesture Ratio (%)',
+                              data: vueThis.data.gesture.map(v => Math.floor(v)),
+                              backgroundColor: 'hsl(217, 71%, 53%)',
+                              borderColor: 'hsl(217, 71%, 43%)',
+                              fill: false
+                           }, {
+                              label: 'Speaking Rate (wpm)',
+                              data: vueThis.data.rate.map(v => Math.floor(v)),
+                              backgroundColor: 'hsl(48, 100%, 67%)',
+                              borderColor: 'hsl(48, 100%, 47%)',
+                              fill: false
+                           }, {
+                              label: 'Script Score (% similar)',
+                              data: vueThis.data.similar.map(v => Math.floor(v)),
+                              backgroundColor: 'hsl(348, 100%, 61%)',
+                              borderColor: 'hsl(348, 100%, 41%)',
+                              fill: false
+                           }],
+                           labels: labels
+                        },
+                        options: {
+                           legend: {
+                              position: 'right'
+                           },
+                           tooltips: {
+                              mode: 'index'
+                           },
+                           title: {
+                              display: true,
+                              text: 'Past Practice Sessions',
+                              fontSize: 36,
+                              fontFamily: 'BlinkMacSystemFont,-apple-system,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,"Fira Sans","Droid Sans","Helvetica Neue",Helvetica,Arial,sans-serif',
+                              fontStyle: 'normal',
+                              position: 'bottom'
+                           }
+                        }
+                     }, 100);
+                  })
+               }
             }
          }
       });
@@ -252,6 +330,14 @@
             console.log(app.gestureRatio, app.nonGestureImages, app.gestureRatio);
          });
       }
+
+      let temoc = false;
+      $(document).keydown(function (e) {
+         if (!temoc && e.key == 't' && app.showCamera && app.useVideo) {
+            $('#temocContainer').append('<img src="/public/images/temoc.png" />');
+            temoc = true;
+         }
+      });
    </script>
 </body>
 </html>
