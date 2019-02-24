@@ -1,5 +1,7 @@
 # hackutd-2019
 
+https://devpost.com/software/pitchly
+
 ## Inspiration
 
 We can practice a presentation or pitch all day without feedback and get acceptable results, but why work hard when you can work smart and achieve a smoother, more professional presentation with the press of a button? Your friends are tired of giving the same feedback for your speeches over and over, so we automated the process.
