@@ -5,6 +5,7 @@
    <meta charset="utf8" />
    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css" />
+   <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.2/css/all.css" integrity="sha384-fnmOCqbTlWIlj8LyTjo7mOUStjsKC4pOpQbqyi7RrhN7udi9RwhKkMHpvLbHG9Sr" crossorigin="anonymous" />
    <link rel="stylesheet" href="/public/css/main.css" />
    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
 </head>
@@ -18,7 +19,7 @@
    </header>
    <section class="section" id="app">
       <div class="container">
-         <div class="columns" :class='{"hidden": showData}'>
+         <div class="columns" :class='{"hidden": showData || publish}'>
             <div class="column">
                <h2 class="title has-text-centered">Script 📃</h2>
                <p class='has-text-centered'>
@@ -26,7 +27,7 @@
                   <input type="checkbox" name="show-script" v-model='showScript' id='show-script' /><br>
                </p>
                <br><br>
-               <div class="box">
+               <div class="box"  v-if='!edit' @click='startEdit'>
                   <div v-if='showScript' class='script'>
                      <p v-for='line in script.split("\n")'>
                         {{ line }}<br>
@@ -36,6 +37,8 @@
                      Script is hidden.
                   </p>
                </div>
+               <textarea id='scriptArea' rows='6' v-if='edit' v-model='script' autofocus @blur='() => { edit = false; }' class="textarea box is-primary"></textarea>
+               <a href="#" class="button is-black is-outlined is-fullwidth" @click='showPublish'>Make Open Source &nbsp;<i class="fab fa-github"></i></a>
             </div>
             <div class="column">
                <h2 class="title has-text-centered">Practice 💪</h2>
@@ -47,10 +50,10 @@
                </p>
                <br>
                <p>
-                  <a class="button is-danger is-fullwidth is-outlined" v-if='!recording' @click='startRecording'>Start Recording</a>
-                  <a class="button is-danger is-fullwidth is-outlined" v-if='recording' @click='stopRecording'>Stop Recording</a>
+                  <a class="button is-danger is-fullwidth is-outlined" v-if='!recording' @click='startRecording'>Start Recording &nbsp;<i class="fas fa-microphone-alt"></i></a>
+                  <a class="button is-danger is-fullwidth is-outlined" v-if='recording' @click='stopRecording'>Stop Recording &nbsp;<i class="fas fa-stop"></i></a>
                   <br>
-                  <a class="button is-danger is-fullwidth is-outlined" @click='resetText'>Reset</a>
+                  <a class="button is-danger is-fullwidth is-outlined" @click='resetText'>Reset &nbsp;<i class="fas fa-sync-alt"></i></a>
                </p>
                <br>
                <div class="box textbox">
@@ -90,6 +93,14 @@
             </div>
             <div class="column is-10">
                <canvas id="chart"></canvas>
+            </div>
+         </div>
+         <div class="columns" :class='{"hidden": !publish}'>
+            <div class="column">
+               <a href="#" @click='() => { publish = false; }'>&lt; Back</a><br><br>
+               <label for='title' class='label'>Title</label><input name='title' id='title' type="text" v-model='title' placeholder="title" class='input is-fullwidth' /><br>
+               <label for='scriptSubmit' class='label'>Script</label><textarea id='scriptSubmit' class='textarea' v-model='script'></textarea><br>
+               <a href="#" class="button is-black is-fullwidth is-outlined" @click='pushToGithub' id='publishButton'>Push to Github &nbsp;<i class="fab fa-github"></i></a>
             </div>
          </div>
       </div>
@@ -138,6 +149,9 @@
             showCamera: false,
             previousTime: 0,
             showData: false,
+            publish: false,
+            edit: false,
+            title: '',
             script: `This system is pretty cool. We can track similarity between the script and the speech, gesture frequency, filler words, and speech rate to streamline presentation preparation. Built with Vue, NLTK, Scikit-Learn, Google Cloud, Flask, Node, Bulma, WebRTC, and Webkit Speech Recognition in twenty-four hours.`,
             transcript: ``,
             tentativeTranscript: ``,
@@ -175,10 +189,24 @@
                recognition.stop();
                this.recording = false;
                this.previousTime += (new Date()) - this.startTime;
-               this.data.filler.push(this.fillerWordRatio * 100);
-               this.data.similar.push(this.overallSimilar * 100);
-               this.data.rate.push(this.wordsPerMinutes);
-               this.data.gesture.push(this.gestureRatio * 100);
+
+               if (this.rate != 0) {
+                  this.data.filler.push(this.fillerWordRatio * 100);
+                  this.data.similar.push(this.overallSimilar * 100);
+                  this.data.rate.push(this.wordsPerMinutes);
+                  this.data.gesture.push(this.gestureRatio * 100);
+               }
+               
+               for (let i = 0; i < this.data.rate.length; ++i) {
+                  if (this.data.rate[i] == 0) {
+                     this.data.filler.splice(i, 1);
+                     this.data.similar.splice(i, 1);
+                     this.data.rate.splice(i, 1);
+                     this.data.gesture.splice(i, 1);
+                     i--;
+                  }
+               }
+
                localStorage['data'] = JSON.stringify(this.data);
             },
             resetText: function () {
@@ -188,6 +216,25 @@
                this.fillerWordRatio = 0;
                this.numberFillerWords = 0;
                this.previousTime = 0;
+            },
+            startEdit: function () {
+               this.edit = true;
+               app.$forceUpdate();
+               setTimeout(() => {
+                  $('#scriptArea').focus();
+               });
+            },
+            showPublish: function () {
+               this.publish = true
+            },
+            pushToGithub: function () {
+               $('#publishButton').addClass('is-loading');
+               $.post('http://localhost:7654/api/publish', {title: this.title, script: this.script}, function (data) {
+                  console.log(data);
+                  $('#publishButton').removeClass('is-loading');
+                  $('#publishButton').addClass('is-success');
+                  $('#publishButton').text('Published Successfully');
+               });
             },
             toggleData: function () {
                this.showData = !this.showData;

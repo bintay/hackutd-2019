@@ -1,5 +1,5 @@
 .script p {
-   text-indent: 2em;
+
 }
 
 .filler {
@@ -76,4 +76,8 @@
 
 #temocContainer img {
    width: 180px;
+}
+
+.textarea.box {
+   padding: 1.25rem !important;
 }

@@ -60,6 +60,20 @@ app.post('/api/all/', function (req, res) {
    });
 });
 
+app.post('/api/publish', function (req, res) {
+   const title = req.body.title;
+   const filename = title.toLowerCase().replace(/\W/g, '-') + '-' + Math.floor(Math.random() * 1000) + '.md';
+   const script = req.body.script;
+   fs.writeFile(__dirname + '/../publishly-texts/' + filename, `# ${title}\n\n${script}`, function(err) {
+      if (err) console.log(err);
+      exec(`cd /Users/bent/Documents/programming/publishly-texts/ && git add -A && git commit -m 'Published ${title}' && git push`, function (e, stdout, stderr) {
+         console.log(stdout);
+         console.log(stderr);
+         res.send('Success!');
+      });
+   });
+});
+
 var multer  = require('multer');
 var upload = multer({ dest: __dirname + '/public/uploads/' });
 var type = upload.single('data');
